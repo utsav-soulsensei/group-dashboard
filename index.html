@@ -59,6 +59,21 @@
     .chart-card{background:#1a1d27;border:1px solid #2d3148;border-radius:10px;padding:20px;margin-bottom:12px}
     .chart-card:last-child{margin-bottom:0}
     .chart-lbl{font-size:10.5px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.08em;margin-bottom:14px}
+
+    /* ── Leader tables ── */
+    .two-col{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    .ltable{width:100%;border-collapse:collapse;font-size:12px}
+    .ltable th{text-align:left;padding:6px 10px;font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:#475569;font-weight:600;border-bottom:1px solid #2d3148;white-space:nowrap}
+    .ltable th.r{text-align:right}
+    .ltable td{padding:7px 10px;border-bottom:1px solid #1e2130;color:#94a3b8;white-space:nowrap}
+    .ltable td.r{text-align:right}
+    .ltable td.name{color:#cbd5e1;font-weight:500;max-width:160px;overflow:hidden;text-overflow:ellipsis}
+    .ltable tr:last-child td{border-bottom:none}
+    .ltable tr:hover td{background:rgba(99,102,241,.04)}
+    .rank{color:#475569;font-size:11px;width:24px}
+    .bar-wrap{display:flex;align-items:center;gap:6px}
+    .bar{height:6px;border-radius:3px;background:#6366f1;min-width:2px}
+    .pct-val{font-size:11px;color:#818cf8;font-weight:600}
   </style>
 </head>
 <body>
@@ -72,6 +87,7 @@
     <div class="nav-item" data-s="ios">iOS</div>
     <div class="nav-item" data-s="android">Android</div>
     <div class="nav-item" data-s="platform">Platform</div>
+    <div class="nav-item" data-s="leaders">Leaders</div>
   </div>
   <div class="gran-wrap">
     <div class="ctrl-lbl">Granularity</div>
@@ -149,6 +165,47 @@
       <div class="chart-card"><div class="chart-lbl">Platform Share</div><canvas id="c-plat-donut"></canvas></div>
     </div>
     <div class="chart-card"><div class="chart-lbl">Revenue by Platform</div><canvas id="c-plat-rev"></canvas></div>
+  </div>
+
+  <!-- Leaders -->
+  <div class="section" id="section-leaders">
+    <div class="sec-header">
+      <div class="sec-title">Leader Performance</div>
+      <div class="period-badge">Last 7 Days</div>
+    </div>
+
+    <!-- Top 10 by Revenue with % contribution -->
+    <div class="chart-card">
+      <div class="chart-lbl">Top 10 by Revenue &nbsp;·&nbsp; <span style="color:#94a3b8;font-size:10px;text-transform:none;letter-spacing:0">% contribution to overall revenue &amp; new purchases</span></div>
+      <table class="ltable" id="tbl-rev">
+        <thead><tr>
+          <th class="rank">#</th>
+          <th>Leader</th>
+          <th class="r">Revenue</th>
+          <th class="r">% of Total Rev</th>
+          <th class="r">% of Total New Purchases</th>
+        </tr></thead>
+        <tbody id="tbody-rev"></tbody>
+      </table>
+    </div>
+
+    <!-- Top 10 by Self + New side by side -->
+    <div class="two-col">
+      <div class="chart-card" style="margin-bottom:0">
+        <div class="chart-lbl">Top 10 by Self Purchases</div>
+        <table class="ltable">
+          <thead><tr><th class="rank">#</th><th>Leader</th><th class="r">Self Purchases</th></tr></thead>
+          <tbody id="tbody-self"></tbody>
+        </table>
+      </div>
+      <div class="chart-card" style="margin-bottom:0">
+        <div class="chart-lbl">Top 10 by New Purchases</div>
+        <table class="ltable">
+          <thead><tr><th class="rank">#</th><th>Leader</th><th class="r">New Purchases</th></tr></thead>
+          <tbody id="tbody-new"></tbody>
+        </table>
+      </div>
+    </div>
   </div>
 
 </div>
@@ -369,7 +426,10 @@ document.querySelectorAll('.nav-item').forEach(function(el){
     el.classList.add('active');
     curSec = el.getAttribute('data-s');
     document.getElementById('section-'+curSec).classList.add('active');
-    if (DATA) renderSection(curSec, curGran);
+    if (DATA) {
+      if (curSec === 'leaders') renderLeaders();
+      else renderSection(curSec, curGran);
+    }
   });
 });
 
@@ -392,6 +452,64 @@ document.getElementById('apply-btn').addEventListener('click', function(){
   if (DATA) renderSection(curSec, curGran);
 });
 
+function renderLeaders() {
+  var L = DATA.leaders;
+  if (!L) return;
+  var rows = L.rows.slice();
+  var otr  = L.overall_tr || 1;
+  var onp  = L.overall_np || 1;
+
+  function topN(arr, field, n) {
+    return arr.slice().sort(function(a,b){ return b[field]-a[field]; }).slice(0,n);
+  }
+  function fPctBar(val, total) {
+    var p = total > 0 ? (val/total*100) : 0;
+    var w = Math.max(2, Math.round(p * 1.5));
+    return '<div class="bar-wrap"><div class="bar" style="width:'+w+'px"></div><span class="pct-val">'+p.toFixed(1)+'%</span></div>';
+  }
+
+  // Top 10 by revenue
+  var byRev = topN(rows, 'tr', 10);
+  var tbRev = document.getElementById('tbody-rev');
+  tbRev.innerHTML = '';
+  byRev.forEach(function(r, i) {
+    var tr = document.createElement('tr');
+    tr.innerHTML =
+      '<td class="rank r">'+(i+1)+'</td>'+
+      '<td class="name">'+r.name+'</td>'+
+      '<td class="r">'+fRev(r.tr)+'</td>'+
+      '<td class="r">'+fPctBar(r.tr, otr)+'</td>'+
+      '<td class="r">'+fPctBar(r.np, onp)+'</td>';
+    tbRev.appendChild(tr);
+  });
+
+  // Top 10 by self purchases
+  var bySelf = topN(rows, 'sp', 10);
+  var tbSelf = document.getElementById('tbody-self');
+  tbSelf.innerHTML = '';
+  bySelf.forEach(function(r, i) {
+    var tr = document.createElement('tr');
+    tr.innerHTML =
+      '<td class="rank r">'+(i+1)+'</td>'+
+      '<td class="name">'+r.name+'</td>'+
+      '<td class="r">'+fNum(r.sp)+'</td>';
+    tbSelf.appendChild(tr);
+  });
+
+  // Top 10 by new purchases
+  var byNew = topN(rows, 'np', 10);
+  var tbNew = document.getElementById('tbody-new');
+  tbNew.innerHTML = '';
+  byNew.forEach(function(r, i) {
+    var tr = document.createElement('tr');
+    tr.innerHTML =
+      '<td class="rank r">'+(i+1)+'</td>'+
+      '<td class="name">'+r.name+'</td>'+
+      '<td class="r">'+fNum(r.np)+'</td>';
+    tbNew.appendChild(tr);
+  });
+}
+
 buildRangeBtns();
 
 fetch('data.json')
@@ -403,6 +521,7 @@ fetch('data.json')
     DATA = data;
     document.getElementById('last-updated').textContent = 'Updated: ' + data.last_updated;
     renderSection('overall', 'daily');
+    renderLeaders();
   })
   .catch(function(err){
     document.getElementById('main').innerHTML =

@@ -112,6 +112,38 @@ data['platform'] = {'daily':   plat_agg(daily_plat, lambda d:d, 'daily'),
                     'weekly':  plat_agg(daily_plat, wk, 'weekly'),
                     'monthly': plat_agg(daily_plat, mo, 'monthly')}
 
+# Leader sheet
+def parse_leaders(text):
+    overall = {}
+    rows = []
+    for cols in csv.reader(text.splitlines()):
+        if not cols or cols[0] in ('', 'leader_name'): continue
+        name = cols[0].strip()
+        tp = money(cols[2])
+        tr = money(cols[3])
+        sp = money(cols[5])
+        np = money(cols[6])
+        nr = money(cols[8])
+        row = {'name': name, 'tp': tp, 'tr': tr, 'sp': sp, 'np': np, 'nr': nr}
+        if name == '$overall':
+            overall = row
+        else:
+            rows.append(row)
+    return overall, rows
+
+print('Fetching leaders...')
+ldr_text = fetch('Leader')
+ldr_overall, ldr_rows = parse_leaders(ldr_text)
+print(f'  {len(ldr_rows)} leaders, overall: {ldr_overall}')
+
+data['leaders'] = {
+    'overall_tr': ldr_overall.get('tr', 0),
+    'overall_np': ldr_overall.get('np', 0),
+    'overall_sp': ldr_overall.get('sp', 0),
+    'overall_tp': ldr_overall.get('tp', 0),
+    'rows': ldr_rows
+}
+
 data['last_updated'] = datetime.now().strftime('%d %b %Y, %I:%M %p')
 
 with open('data.json','w') as f:
