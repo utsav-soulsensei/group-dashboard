@@ -2,8 +2,11 @@ name: Update data.json
 
 on:
   schedule:
-    - cron: '0 2 * * *'   # daily at 2am UTC
+    - cron: '0 2 * * *'   # daily at 2am UTC (7:30am IST)
   workflow_dispatch:        # manual trigger from GitHub UI
+
+permissions:
+  contents: write           # needed to commit data.json back to the repo
 
 jobs:
   update:
@@ -23,3 +26,4 @@ jobs:
         with:
           message: 'chore: update data.json'
           add: 'data.json'
+          default_author: github_actions
