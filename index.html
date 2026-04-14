@@ -1,0 +1,715 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Group Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#0f1117;color:#e2e8f0;min-height:100vh;font-size:14px}
+
+/* ── LOADING / ERROR ─────────────────────────────── */
+#loading,#error{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;background:#0f1117;z-index:100}
+.spinner{width:40px;height:40px;border:3px solid #1e2a4a;border-top-color:#6366f1;border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+#loading p{color:#475569;font-size:13px}
+.error-box{background:#13182b;border:1px solid #3f2020;border-radius:12px;padding:32px;max-width:480px;text-align:center}
+.error-box h2{color:#f87171;margin-bottom:12px}
+.error-box p{color:#94a3b8;font-size:13px;margin-bottom:10px}
+.error-box code{display:block;background:#0f1117;border-radius:6px;padding:10px 16px;color:#818cf8;font-size:13px;margin:10px 0;font-family:monospace}
+
+/* ── LAYOUT ──────────────────────────────────────── */
+#app{display:flex}
+.sidebar{width:220px;min-height:100vh;background:#13182b;border-right:1px solid #1e2a4a;padding:22px 14px;display:flex;flex-direction:column;gap:22px;position:fixed;top:0;left:0;bottom:0;overflow-y:auto}
+.logo{font-size:17px;font-weight:700;color:#818cf8;letter-spacing:-.3px}
+.logo span{color:#e2e8f0}
+.section-label{font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:#475569;margin-bottom:8px;font-weight:600}
+.main{margin-left:220px;flex:1;padding:26px 30px;min-height:100vh}
+
+/* ── NAV TABS ────────────────────────────────────── */
+.nav-tabs{display:flex;flex-direction:column;gap:2px}
+.nav-btn{width:100%;text-align:left;padding:8px 12px;border:none;border-radius:7px;background:transparent;color:#64748b;cursor:pointer;font-size:12px;font-weight:600;transition:all .15s}
+.nav-btn:hover:not(.active){background:#1e2235;color:#94a3b8}
+.nav-btn.active{background:rgba(99,102,241,.15);color:#818cf8}
+
+/* ── GRANULARITY ─────────────────────────────────── */
+.toggle-group{display:flex;gap:3px;background:#1e2235;border-radius:8px;padding:3px}
+.toggle-btn{flex:1;padding:6px 0;border:none;border-radius:6px;background:transparent;color:#64748b;cursor:pointer;font-size:12px;font-weight:600;transition:all .15s}
+.toggle-btn.active{background:#6366f1;color:#fff}
+.toggle-btn:hover:not(.active){color:#94a3b8;background:#2d3148}
+
+/* ── RANGE PRESETS ───────────────────────────────── */
+.range-presets{display:flex;flex-wrap:wrap;gap:5px}
+.range-btn{padding:4px 10px;border:1px solid #1e2a4a;border-radius:6px;background:transparent;color:#64748b;cursor:pointer;font-size:11px;font-weight:600;transition:all .15s}
+.range-btn.active{border-color:#6366f1;color:#818cf8;background:rgba(99,102,241,.12)}
+.range-btn:hover:not(.active){border-color:#2d3148;color:#94a3b8}
+
+/* ── CUSTOM DATE ─────────────────────────────────── */
+.date-field{display:flex;flex-direction:column;gap:4px;margin-bottom:6px}
+.date-field label{font-size:10px;color:#475569;font-weight:600;text-transform:uppercase;letter-spacing:.08em}
+.date-field input[type=date]{width:100%;background:#1e2235;border:1px solid #1e2a4a;border-radius:6px;color:#e2e8f0;padding:6px 8px;font-size:12px;outline:none;color-scheme:dark}
+.date-field input[type=date]:focus{border-color:#6366f1}
+.apply-btn{width:100%;padding:7px;border:none;border-radius:6px;background:#6366f1;color:#fff;cursor:pointer;font-size:12px;font-weight:600;margin-top:2px}
+.apply-btn:hover{background:#5558e3}
+.sidebar-footer{margin-top:auto;padding-top:14px;border-top:1px solid #1e2a4a;font-size:11px;color:#334155}
+
+/* ── PAGE HEADER ─────────────────────────────────── */
+.page-header{margin-bottom:18px}
+.page-header h1{font-size:19px;font-weight:700;color:#f1f5f9}
+.range-label{font-size:12px;color:#475569;margin-top:3px}
+
+/* ── KPI CARDS ───────────────────────────────────── */
+.kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:14px}
+.kpi-card{background:#13182b;border:1px solid #1e2a4a;border-radius:12px;padding:18px 16px}
+.kpi-label{font-size:10px;color:#475569;text-transform:uppercase;letter-spacing:.08em;font-weight:600;margin-bottom:8px}
+.kpi-value{font-size:24px;font-weight:700;color:#f1f5f9;letter-spacing:-.5px;line-height:1}
+.kpi-delta{margin-top:8px;font-size:11px;font-weight:600;display:flex;align-items:center;gap:3px}
+.kpi-delta.up{color:#4ade80}.kpi-delta.down{color:#f87171}.kpi-delta.neutral{color:#475569}
+
+/* ── CHARTS ──────────────────────────────────────── */
+.charts-row1{display:grid;grid-template-columns:2fr 1fr;gap:12px;margin-bottom:12px}
+.charts-row2{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px}
+.chart-card{background:#13182b;border:1px solid #1e2a4a;border-radius:12px;padding:18px}
+.chart-title{font-size:13px;font-weight:600;color:#94a3b8;margin-bottom:12px}
+
+/* ── TABLE ───────────────────────────────────────── */
+.table-card{background:#13182b;border:1px solid #1e2a4a;border-radius:12px;padding:18px;overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:12px}
+th{text-align:right;padding:7px 12px;font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:#475569;font-weight:600;border-bottom:1px solid #1e2a4a;white-space:nowrap}
+th:first-child{text-align:left}
+td{text-align:right;padding:8px 12px;border-bottom:1px solid #1a2040;color:#94a3b8;white-space:nowrap}
+td:first-child{text-align:left;color:#cbd5e1;font-weight:500}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:rgba(99,102,241,.04)}
+
+/* ── PLATFORM CARDS ──────────────────────────────── */
+.platform-kpi-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:14px}
+.platform-kpi-card{background:#13182b;border:1px solid #1e2a4a;border-top:3px solid #6366f1;border-radius:12px;padding:18px 16px}
+.platform-card-header{font-size:14px;font-weight:700;margin-bottom:14px}
+.pm-row{display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #1a2040}
+.pm-row:last-child{border-bottom:none}
+.pm-label{font-size:11px;color:#475569;font-weight:500}
+.pm-value{font-size:13px;font-weight:600;color:#e2e8f0}
+
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:#2d3148;border-radius:3px}
+</style>
+</head>
+<body>
+
+<!-- Loading -->
+<div id="loading">
+  <div class="spinner"></div>
+  <p>Loading data from Google Sheets…</p>
+</div>
+
+<!-- Error -->
+<div id="error" hidden>
+  <div class="error-box">
+    <h2>Could not load data</h2>
+    <p id="error-msg"></p>
+    <p>This dashboard must be served over HTTP, not opened as a file. Run one of these in the dashboard folder:</p>
+    <code>npx serve .</code>
+    <code>python -m http.server 8000</code>
+    <p style="margin-top:8px">Then open <strong>http://localhost:3000</strong> (or :8000)</p>
+  </div>
+</div>
+
+<!-- App -->
+<div id="app" hidden>
+  <aside class="sidebar">
+    <div class="logo">Group<span> Dashboard</span></div>
+
+    <div>
+      <div class="section-label">Views</div>
+      <div class="nav-tabs" id="navTabs">
+        <button class="nav-btn active" data-view="overall">&#9632; Overall</button>
+        <button class="nav-btn" data-view="web">&#9632; Web</button>
+        <button class="nav-btn" data-view="ios">&#9632; iOS</button>
+        <button class="nav-btn" data-view="android">&#9632; Android</button>
+        <button class="nav-btn" data-view="platform">&#9632; Platform</button>
+      </div>
+    </div>
+
+    <div id="controls">
+      <div>
+        <div class="section-label">Granularity</div>
+        <div class="toggle-group" id="granGroup">
+          <button class="toggle-btn active" data-gran="day">Day</button>
+          <button class="toggle-btn" data-gran="week">Week</button>
+          <button class="toggle-btn" data-gran="month">Month</button>
+        </div>
+      </div>
+      <div>
+        <div class="section-label">Date Range</div>
+        <div class="range-presets" id="rangePresets"></div>
+      </div>
+      <div>
+        <div class="section-label">Custom Range</div>
+        <div class="date-field"><label>From</label><input type="date" id="dateFrom"></div>
+        <div class="date-field"><label>To</label><input type="date" id="dateTo"></div>
+        <button class="apply-btn" onclick="applyCustom()">Apply</button>
+      </div>
+    </div>
+
+    <div class="sidebar-footer" id="lastUpdated"></div>
+  </aside>
+
+  <main class="main">
+
+    <!-- ── SINGLE PLATFORM VIEW ── -->
+    <div id="view-single">
+      <div class="page-header">
+        <h1 id="viewTitle">Payments &amp; Revenue</h1>
+        <div class="range-label" id="rangeLabel"></div>
+      </div>
+      <div class="kpi-grid">
+        <div class="kpi-card"><div class="kpi-label">Total Payments</div><div class="kpi-value" id="k-tp">—</div><div class="kpi-delta neutral" id="k-tp-d">—</div></div>
+        <div class="kpi-card"><div class="kpi-label">Total Revenue</div><div class="kpi-value" id="k-tr">—</div><div class="kpi-delta neutral" id="k-tr-d">—</div></div>
+        <div class="kpi-card"><div class="kpi-label">Overall ARPU</div><div class="kpi-value" id="k-arpu">—</div><div class="kpi-delta neutral" id="k-arpu-d">—</div></div>
+        <div class="kpi-card"><div class="kpi-label">Repeat %</div><div class="kpi-value" id="k-rp">—</div><div class="kpi-delta neutral" id="k-rp-d">—</div></div>
+      </div>
+      <div class="charts-row1">
+        <div class="chart-card"><div class="chart-title">Revenue — New vs Repeat</div><div style="height:256px"><canvas id="cRevenue"></canvas></div></div>
+        <div class="chart-card"><div class="chart-title">Revenue Split</div><div style="height:256px"><canvas id="cSplit"></canvas></div></div>
+      </div>
+      <div class="charts-row2">
+        <div class="chart-card"><div class="chart-title">Payments — New vs Repeat</div><div style="height:216px"><canvas id="cPayments"></canvas></div></div>
+        <div class="chart-card"><div class="chart-title">ARPU Trend</div><div style="height:216px"><canvas id="cArpu"></canvas></div></div>
+      </div>
+      <div class="table-card">
+        <div class="chart-title">Summary Table</div>
+        <table>
+          <thead><tr><th>Period</th><th>Total Pmts</th><th>New Pmts</th><th>Repeat Pmts</th><th>Repeat %</th><th>Total Revenue</th><th>New Revenue</th><th>Repeat Revenue</th><th>ARPU</th></tr></thead>
+          <tbody id="tBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ── PLATFORM COMPARISON VIEW ── -->
+    <div id="view-platform" hidden>
+      <div class="page-header">
+        <h1>Platform Comparison</h1>
+        <div class="range-label" id="platLabel"></div>
+      </div>
+      <div class="platform-kpi-grid">
+        <div class="platform-kpi-card" style="border-top-color:#6366f1">
+          <div class="platform-card-header" style="color:#818cf8">Web</div>
+          <div class="pm-row"><span class="pm-label">Payments</span><span class="pm-value" id="pk-web-tp">—</span></div>
+          <div class="pm-row"><span class="pm-label">Revenue</span><span class="pm-value" id="pk-web-tr">—</span></div>
+          <div class="pm-row"><span class="pm-label">ARPU</span><span class="pm-value" id="pk-web-arpu">—</span></div>
+          <div class="pm-row"><span class="pm-label">Repeat %</span><span class="pm-value" id="pk-web-rp">—</span></div>
+        </div>
+        <div class="platform-kpi-card" style="border-top-color:#4ade80">
+          <div class="platform-card-header" style="color:#4ade80">iOS</div>
+          <div class="pm-row"><span class="pm-label">Payments</span><span class="pm-value" id="pk-ios-tp">—</span></div>
+          <div class="pm-row"><span class="pm-label">Revenue</span><span class="pm-value" id="pk-ios-tr">—</span></div>
+          <div class="pm-row"><span class="pm-label">ARPU</span><span class="pm-value" id="pk-ios-arpu">—</span></div>
+          <div class="pm-row"><span class="pm-label">Repeat %</span><span class="pm-value" id="pk-ios-rp">—</span></div>
+        </div>
+        <div class="platform-kpi-card" style="border-top-color:#f59e0b">
+          <div class="platform-card-header" style="color:#f59e0b">Android</div>
+          <div class="pm-row"><span class="pm-label">Payments</span><span class="pm-value" id="pk-and-tp">—</span></div>
+          <div class="pm-row"><span class="pm-label">Revenue</span><span class="pm-value" id="pk-and-tr">—</span></div>
+          <div class="pm-row"><span class="pm-label">ARPU</span><span class="pm-value" id="pk-and-arpu">—</span></div>
+          <div class="pm-row"><span class="pm-label">Repeat %</span><span class="pm-value" id="pk-and-rp">—</span></div>
+        </div>
+      </div>
+      <div class="charts-row1">
+        <div class="chart-card"><div class="chart-title">Revenue by Platform</div><div style="height:256px"><canvas id="cPlatRev"></canvas></div></div>
+        <div class="chart-card"><div class="chart-title">Revenue Mix</div><div style="height:256px"><canvas id="cPlatMix"></canvas></div></div>
+      </div>
+      <div class="charts-row2">
+        <div class="chart-card"><div class="chart-title">Payments by Platform</div><div style="height:216px"><canvas id="cPlatPmt"></canvas></div></div>
+        <div class="chart-card"><div class="chart-title">ARPU by Platform</div><div style="height:216px"><canvas id="cPlatArpu"></canvas></div></div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<script>
+// ── CONFIG ───────────────────────────────────────────────────────────────────
+const SHEET_ID = '1Y1QV6_hBlZJY9ktltCjiJsNCFqcBsGUmdrRuxwwBWn4';
+const SHEET_NAMES = { overall:'', web:'Web', ios:'iOS', android:'Android' };
+const PRESETS = { day:['7d','15d','30d','All'], week:['4w','8w','All'], month:['3m','All'] };
+
+// ── STATE ────────────────────────────────────────────────────────────────────
+const S = { view:'overall', gran:'day', range:'30d', from:null, to:null };
+let DB = null;   // { overall, web, ios, android }
+let LAST = null; // max date across all sheets
+let C = {};      // chart instances
+
+// ── CSV PARSING ──────────────────────────────────────────────────────────────
+function parseCSV(text) {
+  const rows = [];
+  let row = [], field = '', inQ = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (c === '"') { inQ = !inQ; continue; }
+    if (c === ',' && !inQ) { row.push(field); field = ''; continue; }
+    if ((c === '\n' || c === '\r') && !inQ) {
+      if (row.length || field) { row.push(field); rows.push(row); row = []; field = ''; }
+      if (c === '\r' && text[i+1] === '\n') i++;
+      continue;
+    }
+    field += c;
+  }
+  if (row.length || field) { row.push(field); rows.push(row); }
+  return rows;
+}
+
+const MON = {jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11};
+
+function parseDate(s) {
+  const p = String(s).trim().split('-');
+  if (p.length < 3) return null;
+  const mon = MON[p[1].toLowerCase()];
+  if (mon === undefined) return null;
+  const d = new Date(2000 + parseInt(p[2]), mon, parseInt(p[0]));
+  d.setHours(0,0,0,0);
+  return d;
+}
+
+function toMoney(s) { return parseInt(String(s).replace(/[₹,\s]/g,'')) || 0; }
+
+function parseRow(cols) {
+  if (!cols || cols.length < 14) return null;
+  const date = parseDate(cols[0]);
+  if (!date || isNaN(date.getTime())) return null;
+  const tp = parseFloat(cols[1]) || 0;
+  if (tp === 0) return null; // skip zero-payment rows
+  return {
+    date,
+    tp, np: parseFloat(cols[2])||0, rp: parseFloat(cols[3])||0,
+    tr: toMoney(cols[6]), nr: toMoney(cols[7]), rr: toMoney(cols[8]),
+    oa: toMoney(cols[11]), na: toMoney(cols[12]), ra: toMoney(cols[13])
+  };
+}
+
+// ── DATA FETCHING ────────────────────────────────────────────────────────────
+async function fetchSheet(name) {
+  const base = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv`;
+  const url = name ? `${base}&sheet=${encodeURIComponent(name)}` : base;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`HTTP ${res.status} fetching "${name||'overall'}" sheet`);
+  const text = await res.text();
+  return parseCSV(text).slice(1).map(parseRow).filter(Boolean).sort((a,b) => a.date-b.date);
+}
+
+async function loadAll() {
+  const [overall, web, ios, android] = await Promise.all([
+    fetchSheet(SHEET_NAMES.overall),
+    fetchSheet(SHEET_NAMES.web),
+    fetchSheet(SHEET_NAMES.ios),
+    fetchSheet(SHEET_NAMES.android),
+  ]);
+  return { overall, web, ios, android };
+}
+
+function findLastDate() {
+  let max = new Date(0);
+  Object.values(DB).flat().forEach(r => { if (r.date > max) max = r.date; });
+  return max;
+}
+
+// ── DATA PROCESSING ──────────────────────────────────────────────────────────
+function getSource() { return DB[S.view] || DB.overall; }
+
+function filtered(data) {
+  if (S.range === 'custom' && S.from && S.to)
+    return data.filter(d => d.date >= S.from && d.date <= S.to);
+  const days = {'7d':7,'15d':15,'30d':30,'4w':28,'8w':56,'3m':90}[S.range];
+  if (!days) return data;
+  const last = data[data.length-1]?.date || LAST;
+  const cut = new Date(last); cut.setDate(cut.getDate()-days+1);
+  return data.filter(d => d.date >= cut);
+}
+
+function prevOf(data, fd) {
+  if (!fd.length || S.range === 'All') return [];
+  const ms = fd[fd.length-1].date - fd[0].date + 86400000;
+  const pe = new Date(fd[0].date.getTime()-86400000);
+  const ps = new Date(pe.getTime()-ms+86400000);
+  return data.filter(d => d.date >= ps && d.date <= pe);
+}
+
+function weekStart(d) {
+  const x = new Date(d), day = x.getDay(), diff = day===0?-6:1-day;
+  x.setDate(x.getDate()+diff); x.setHours(0,0,0,0); return x;
+}
+
+function rollup(label, rows) {
+  const tp=rows.reduce((a,r)=>a+r.tp,0), np=rows.reduce((a,r)=>a+r.np,0), rp=rows.reduce((a,r)=>a+r.rp,0);
+  const tr=rows.reduce((a,r)=>a+r.tr,0), nr=rows.reduce((a,r)=>a+r.nr,0), rr=rows.reduce((a,r)=>a+r.rr,0);
+  return {label,tp,np,rp,tr,nr,rr,
+    oa:tp?Math.round(tr/tp):0, na:np?Math.round(nr/np):0, ra:rp?Math.round(rr/rp):0};
+}
+
+function aggregate(data) {
+  if (!data.length) return [];
+  if (S.gran === 'day') return data.map(d => ({
+    label:fDate(d.date), tp:d.tp, np:d.np, rp:d.rp, tr:d.tr, nr:d.nr, rr:d.rr,
+    oa:d.oa, na:d.na, ra:d.ra
+  }));
+  if (S.gran === 'week') {
+    const g = new Map();
+    data.forEach(d => {
+      const ws=weekStart(d.date), k=ws.toISOString().slice(0,10);
+      if (!g.has(k)) g.set(k,{ws,rows:[]});
+      g.get(k).rows.push(d);
+    });
+    return [...g.entries()].sort((a,b)=>a[0]<b[0]?-1:1)
+      .map(([,{ws,rows}]) => rollup('Wk '+fDate(ws), rows));
+  }
+  if (S.gran === 'month') {
+    const g = new Map();
+    data.forEach(d => {
+      const k = d.date.toISOString().slice(0,7);
+      if (!g.has(k)) g.set(k,{d:d.date,rows:[]});
+      g.get(k).rows.push(d);
+    });
+    return [...g.entries()].sort((a,b)=>a[0]<b[0]?-1:1)
+      .map(([,{d,rows}]) => rollup(d.toLocaleDateString('en-IN',{month:'short',year:'2-digit'}), rows));
+  }
+  return [];
+}
+
+function kpis(periods) {
+  const tp=periods.reduce((a,p)=>a+p.tp,0);
+  const tr=periods.reduce((a,p)=>a+p.tr,0);
+  const rp=periods.reduce((a,p)=>a+p.rp,0);
+  return {tp, tr, arpu:tp?tr/tp:0, rpct:tp?rp/tp*100:0};
+}
+
+// ── PLATFORM ALIGNMENT ───────────────────────────────────────────────────────
+function platformAggregated() {
+  const agg = {
+    web:   aggregate(filtered(DB.web)),
+    ios:   aggregate(filtered(DB.ios)),
+    android: aggregate(filtered(DB.android)),
+  };
+  // Build ordered label union
+  const seen = new Map();
+  Object.values(agg).forEach(arr => arr.forEach(p => { if (!seen.has(p.label)) seen.set(p.label, seen.size); }));
+  const labels = [...seen.keys()];
+  // Align
+  const aligned = {};
+  Object.entries(agg).forEach(([name, arr]) => {
+    const m = new Map(arr.map(x=>[x.label,x]));
+    aligned[name] = labels.map(l => m.get(l) || {tp:0,np:0,rp:0,tr:0,nr:0,rr:0,oa:0,na:0,ra:0});
+  });
+  return {labels, data:aligned};
+}
+
+// ── FORMATTING ───────────────────────────────────────────────────────────────
+function fINR(v) {
+  if (!v&&v!==0) return '—';
+  return '₹'+new Intl.NumberFormat('en-IN').format(Math.round(v));
+}
+function fShort(v) {
+  if (!v&&v!==0) return '—';
+  if (v>=1e7) return '₹'+(v/1e7).toFixed(2)+'Cr';
+  if (v>=1e5) return '₹'+(v/1e5).toFixed(2)+'L';
+  if (v>=1e3) return '₹'+(v/1e3).toFixed(1)+'K';
+  return '₹'+Math.round(v);
+}
+function fDate(d) { return d.toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'2-digit'}); }
+
+// ── KPI HELPERS ──────────────────────────────────────────────────────────────
+function setDelta(id, curr, prev) {
+  const el = document.getElementById(id);
+  if (!prev) { el.className='kpi-delta neutral'; el.textContent='All time'; return; }
+  const pct = (curr-prev)/prev*100;
+  el.className = 'kpi-delta '+(pct>=0?'up':'down');
+  el.innerHTML = (pct>=0?'▲ ':'▼ ')+Math.abs(pct).toFixed(1)+'% vs prev period';
+}
+
+// ── CHARTS ───────────────────────────────────────────────────────────────────
+const GR='#1a2040', TC='#475569';
+const mkTk = (ex={}) => ({color:TC,font:{size:10},maxTicksLimit:14,...ex});
+const mkScale = (stacked=false) => ({
+  x:{grid:{color:GR},border:{color:GR},ticks:mkTk({maxRotation:45}),stacked},
+  y:{grid:{color:GR},border:{color:GR},ticks:mkTk(),stacked}
+});
+const LEG = {labels:{color:'#94a3b8',font:{size:11},boxWidth:12,padding:12}};
+const TIP = {backgroundColor:'#1e2a4a',titleColor:'#94a3b8',bodyColor:'#e2e8f0',borderColor:'#2d3a6a',borderWidth:1};
+const moneyTip = cb => ({...TIP, callbacks:{label:c=>c.dataset.label+': '+fINR(c.raw)}});
+
+function initCharts() {
+  Chart.defaults.color = '#64748b';
+
+  // Revenue line
+  C.rev = new Chart(document.getElementById('cRevenue'), {
+    type:'line',
+    data:{labels:[],datasets:[
+      {label:'New Revenue',data:[],borderColor:'#6366f1',backgroundColor:'rgba(99,102,241,.12)',fill:true,tension:.3,pointRadius:2},
+      {label:'Repeat Revenue',data:[],borderColor:'#4ade80',backgroundColor:'rgba(74,222,128,.1)',fill:true,tension:.3,pointRadius:2}
+    ]},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:LEG,tooltip:moneyTip()},
+      scales:{...mkScale(),y:{...mkScale().y,ticks:{...mkTk(),callback:v=>fShort(v)}}}}
+  });
+
+  // Revenue split doughnut
+  C.spl = new Chart(document.getElementById('cSplit'), {
+    type:'doughnut',
+    data:{labels:['New Revenue','Repeat Revenue'],datasets:[{data:[0,0],backgroundColor:['#6366f1','#4ade80'],borderWidth:0,hoverOffset:8}]},
+    options:{responsive:true,maintainAspectRatio:false,cutout:'65%',
+      plugins:{legend:{...LEG,position:'bottom'},tooltip:{...TIP,callbacks:{label:c=>{
+        const tot=c.dataset.data.reduce((a,b)=>a+b,0);
+        return c.label+': '+fINR(c.raw)+' ('+(tot?c.raw/tot*100:0).toFixed(1)+'%)';
+      }}}}}
+  });
+
+  // Payments stacked bar
+  C.pmt = new Chart(document.getElementById('cPayments'), {
+    type:'bar',
+    data:{labels:[],datasets:[
+      {label:'New Payments',data:[],backgroundColor:'rgba(99,102,241,.8)',borderRadius:3},
+      {label:'Repeat Payments',data:[],backgroundColor:'rgba(74,222,128,.8)',borderRadius:3}
+    ]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:LEG,tooltip:TIP},scales:mkScale(true)}
+  });
+
+  // ARPU line
+  C.arp = new Chart(document.getElementById('cArpu'), {
+    type:'line',
+    data:{labels:[],datasets:[
+      {label:'Overall ARPU',data:[],borderColor:'#f59e0b',tension:.3,pointRadius:2,borderWidth:2},
+      {label:'New ARPU',data:[],borderColor:'#818cf8',tension:.3,pointRadius:2,borderDash:[4,3]},
+      {label:'Repeat ARPU',data:[],borderColor:'#86efac',tension:.3,pointRadius:2,borderDash:[4,3]}
+    ]},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:LEG,tooltip:moneyTip()},
+      scales:{...mkScale(),y:{...mkScale().y,ticks:{...mkTk(),callback:v=>'₹'+(v/1000).toFixed(1)+'K'}}}}
+  });
+
+  // Platform: Revenue stacked bar
+  C.pRev = new Chart(document.getElementById('cPlatRev'), {
+    type:'bar',
+    data:{labels:[],datasets:[
+      {label:'Web',data:[],backgroundColor:'rgba(99,102,241,.8)',borderRadius:3},
+      {label:'iOS',data:[],backgroundColor:'rgba(74,222,128,.8)',borderRadius:3},
+      {label:'Android',data:[],backgroundColor:'rgba(245,158,11,.8)',borderRadius:3}
+    ]},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:LEG,tooltip:moneyTip()},
+      scales:{...mkScale(true),y:{...mkScale(true).y,ticks:{...mkTk(),callback:v=>fShort(v)}}}}
+  });
+
+  // Platform: Revenue mix doughnut
+  C.pMix = new Chart(document.getElementById('cPlatMix'), {
+    type:'doughnut',
+    data:{labels:['Web','iOS','Android'],datasets:[{data:[0,0,0],backgroundColor:['#6366f1','#4ade80','#f59e0b'],borderWidth:0,hoverOffset:8}]},
+    options:{responsive:true,maintainAspectRatio:false,cutout:'65%',
+      plugins:{legend:{...LEG,position:'bottom'},tooltip:{...TIP,callbacks:{label:c=>{
+        const tot=c.dataset.data.reduce((a,b)=>a+b,0);
+        return c.label+': '+fINR(c.raw)+' ('+(tot?c.raw/tot*100:0).toFixed(1)+'%)';
+      }}}}}
+  });
+
+  // Platform: Payments stacked bar
+  C.pPmt = new Chart(document.getElementById('cPlatPmt'), {
+    type:'bar',
+    data:{labels:[],datasets:[
+      {label:'Web',data:[],backgroundColor:'rgba(99,102,241,.8)',borderRadius:3},
+      {label:'iOS',data:[],backgroundColor:'rgba(74,222,128,.8)',borderRadius:3},
+      {label:'Android',data:[],backgroundColor:'rgba(245,158,11,.8)',borderRadius:3}
+    ]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:LEG,tooltip:TIP},scales:mkScale(true)}
+  });
+
+  // Platform: ARPU line
+  C.pArpu = new Chart(document.getElementById('cPlatArpu'), {
+    type:'line',
+    data:{labels:[],datasets:[
+      {label:'Web ARPU',data:[],borderColor:'#6366f1',tension:.3,pointRadius:2},
+      {label:'iOS ARPU',data:[],borderColor:'#4ade80',tension:.3,pointRadius:2},
+      {label:'Android ARPU',data:[],borderColor:'#f59e0b',tension:.3,pointRadius:2}
+    ]},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:LEG,tooltip:moneyTip()},
+      scales:{...mkScale(),y:{...mkScale().y,ticks:{...mkTk(),callback:v=>'₹'+(v/1000).toFixed(1)+'K'}}}}
+  });
+}
+
+function upd(ch, labels, ...series) {
+  ch.data.labels = labels;
+  series.forEach((d,i) => ch.data.datasets[i].data = d);
+  ch.update();
+}
+
+// ── RENDER ───────────────────────────────────────────────────────────────────
+function render() {
+  S.view === 'platform' ? renderPlatform() : renderSingle();
+}
+
+function renderSingle() {
+  const src = getSource();
+  const fd  = filtered(src);
+  const pd  = prevOf(src, fd);
+  const periods = aggregate(fd);
+  const ppd = pd.length ? aggregate(pd) : [];
+  const k   = kpis(periods);
+  const pk  = ppd.length ? kpis(ppd) : null;
+
+  const titles = {overall:'Overall',web:'Web',ios:'iOS',android:'Android'};
+  document.getElementById('viewTitle').textContent = (titles[S.view]||'Overall')+' — Payments & Revenue';
+
+  if (fd.length) {
+    document.getElementById('rangeLabel').textContent =
+      fDate(fd[0].date)+' – '+fDate(fd[fd.length-1].date)+' · '+fd.length+' days';
+  }
+
+  // KPIs
+  document.getElementById('k-tp').textContent   = k.tp.toLocaleString('en-IN');
+  document.getElementById('k-tr').textContent   = fShort(k.tr);
+  document.getElementById('k-arpu').textContent = fINR(k.arpu);
+  document.getElementById('k-rp').textContent   = k.rpct.toFixed(1)+'%';
+  setDelta('k-tp-d',   k.tp,   pk?.tp);
+  setDelta('k-tr-d',   k.tr,   pk?.tr);
+  setDelta('k-arpu-d', k.arpu, pk?.arpu);
+  setDelta('k-rp-d',   k.rpct, pk?.rpct);
+
+  // Charts
+  const lb = periods.map(p=>p.label);
+  upd(C.rev,  lb, periods.map(p=>p.nr), periods.map(p=>p.rr));
+  C.spl.data.datasets[0].data = [
+    periods.reduce((a,p)=>a+p.nr,0),
+    periods.reduce((a,p)=>a+p.rr,0)
+  ]; C.spl.update();
+  upd(C.pmt,  lb, periods.map(p=>p.np), periods.map(p=>p.rp));
+  upd(C.arp,  lb, periods.map(p=>p.oa), periods.map(p=>p.na), periods.map(p=>p.ra));
+
+  // Table
+  const tb = document.getElementById('tBody');
+  tb.innerHTML = '';
+  [...periods].reverse().forEach(p => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${p.label}</td><td>${p.tp.toLocaleString('en-IN')}</td><td>${p.np.toLocaleString('en-IN')}</td><td>${p.rp.toLocaleString('en-IN')}</td><td>${p.tp?(p.rp/p.tp*100).toFixed(1)+'%':'—'}</td><td>${fINR(p.tr)}</td><td>${fINR(p.nr)}</td><td>${fINR(p.rr)}</td><td>${fINR(p.oa)}</td>`;
+    tb.appendChild(tr);
+  });
+}
+
+function renderPlatform() {
+  // KPI cards per platform
+  const platMap = {web:'web', ios:'ios', android:'and'};
+  Object.entries(platMap).forEach(([key, prefix]) => {
+    const fd = filtered(DB[key]);
+    const k  = kpis(aggregate(fd));
+    document.getElementById(`pk-${prefix}-tp`).textContent   = k.tp.toLocaleString('en-IN');
+    document.getElementById(`pk-${prefix}-tr`).textContent   = fShort(k.tr);
+    document.getElementById(`pk-${prefix}-arpu`).textContent = fINR(k.arpu);
+    document.getElementById(`pk-${prefix}-rp`).textContent   = k.rpct.toFixed(1)+'%';
+  });
+
+  // Range label from union of filtered dates
+  const allDates = ['web','ios','android'].flatMap(k => filtered(DB[k]).map(r=>r.date)).sort((a,b)=>a-b);
+  if (allDates.length) {
+    document.getElementById('platLabel').textContent =
+      fDate(allDates[0])+' – '+fDate(allDates[allDates.length-1]);
+  }
+
+  // Aligned aggregated data
+  const {labels, data} = platformAggregated();
+  const {web, ios, android} = data;
+
+  upd(C.pRev,  labels, web.map(p=>p.tr),  ios.map(p=>p.tr),  android.map(p=>p.tr));
+  C.pMix.data.datasets[0].data = [
+    web.reduce((a,p)=>a+p.tr,0),
+    ios.reduce((a,p)=>a+p.tr,0),
+    android.reduce((a,p)=>a+p.tr,0),
+  ]; C.pMix.update();
+  upd(C.pPmt,  labels, web.map(p=>p.tp),  ios.map(p=>p.tp),  android.map(p=>p.tp));
+  // Use null for 0-payment periods so lines don't hit zero
+  upd(C.pArpu, labels,
+    web.map(p=>p.tp?p.oa:null),
+    ios.map(p=>p.tp?p.oa:null),
+    android.map(p=>p.tp?p.oa:null)
+  );
+}
+
+// ── SIDEBAR ──────────────────────────────────────────────────────────────────
+function renderPresets() {
+  const c = document.getElementById('rangePresets');
+  c.innerHTML = '';
+  PRESETS[S.gran].forEach(p => {
+    const k = p==='All' ? 'All' : p.toLowerCase();
+    const b = document.createElement('button');
+    b.className = 'range-btn'+(S.range===k?' active':'');
+    b.textContent = p;
+    b.onclick = () => {
+      S.range=k; S.from=null; S.to=null;
+      document.getElementById('dateFrom').value='';
+      document.getElementById('dateTo').value='';
+      renderPresets(); render();
+    };
+    c.appendChild(b);
+  });
+}
+
+function applyCustom() {
+  const f=document.getElementById('dateFrom').value;
+  const t=document.getElementById('dateTo').value;
+  if (!f||!t) return;
+  S.range='custom';
+  S.from=new Date(f+'T00:00:00');
+  S.to=new Date(t+'T00:00:00');
+  document.querySelectorAll('.range-btn').forEach(b=>b.classList.remove('active'));
+  render();
+}
+
+// ── INIT ─────────────────────────────────────────────────────────────────────
+async function init() {
+  try {
+    DB   = await loadAll();
+    LAST = findLastDate();
+
+    document.getElementById('loading').hidden = true;
+    document.getElementById('app').hidden     = false;
+    document.getElementById('lastUpdated').textContent = 'Last updated: '+fDate(LAST);
+
+    initCharts();
+
+    // Nav tabs
+    document.getElementById('navTabs').addEventListener('click', e => {
+      const b = e.target.closest('[data-view]');
+      if (!b) return;
+      S.view = b.dataset.view;
+      document.querySelectorAll('.nav-btn').forEach(x=>x.classList.remove('active'));
+      b.classList.add('active');
+      document.getElementById('view-single').hidden   = S.view==='platform';
+      document.getElementById('view-platform').hidden = S.view!=='platform';
+      render();
+    });
+
+    // Granularity tabs
+    document.getElementById('granGroup').addEventListener('click', e => {
+      const b = e.target.closest('[data-gran]');
+      if (!b) return;
+      S.gran = b.dataset.gran;
+      S.range = S.gran==='day'?'30d': S.gran==='week'?'8w':'All';
+      S.from=null; S.to=null;
+      document.querySelectorAll('.toggle-btn').forEach(x=>x.classList.remove('active'));
+      b.classList.add('active');
+      renderPresets(); render();
+    });
+
+    renderPresets();
+    render();
+
+  } catch(e) {
+    console.error(e);
+    document.getElementById('loading').hidden = true;
+    document.getElementById('error').hidden   = false;
+    document.getElementById('error-msg').textContent = e?.message || String(e);
+  }
+}
+
+init();
+</script>
+</body>
+</html>
