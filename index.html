@@ -120,6 +120,7 @@ tr:hover td{background:rgba(99,102,241,.04)}
       <p>The Google Sheet could not be fetched. Make sure the sheet is shared publicly:</p>
       <p style="margin-top:8px">Sheet → Share → <strong>Anyone with the link → Viewer</strong></p>
     </div>
+    <pre id="error-debug" style="margin-top:14px;text-align:left;background:#0f1117;border-radius:6px;padding:10px;font-size:10px;color:#64748b;white-space:pre-wrap;word-break:break-all"></pre>
   </div>
 </div>
 
@@ -711,7 +712,10 @@ async function init() {
     console.error(e);
     document.getElementById('loading').hidden = true;
     document.getElementById('error').hidden   = false;
-    document.getElementById('error-msg').textContent = e?.message || String(e);
+    const msg = e?.message || e?.toString() || '(no message)';
+    document.getElementById('error-msg').textContent = msg;
+    document.getElementById('error-debug').textContent =
+      'Protocol: '+location.protocol+' | URL: '+location.href+'\nError type: '+e?.name+'\nFull: '+String(e);
     if (location.protocol === 'file:') {
       document.getElementById('error-file-hint').hidden = false;
     } else {
