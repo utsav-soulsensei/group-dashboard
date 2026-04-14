@@ -658,20 +658,29 @@ async function init() {
     render();
 
   } catch(e) {
-    console.error('Failed at step:', _step, e);
-    document.getElementById('loading').hidden = true;
-    document.getElementById('error').hidden   = false;
-    const msg = e?.message || e?.toString() || '(no message)';
-    document.getElementById('error-msg').textContent = 'Step: '+_step+' — '+msg;
-    document.getElementById('error-debug').textContent =
-      'Protocol: '+location.protocol+'\nURL: '+location.href+'\nError: '+e?.name+': '+String(e)+'\nStack: '+(e?.stack||'n/a');
-    if (location.protocol === 'file:') {
-      document.getElementById('error-file-hint').hidden = false;
-    } else {
-      document.getElementById('error-cors-hint').hidden = false;
-    }
+    showError(_step, e);
   }
 }
+
+function showError(step, e) {
+  console.error('Dashboard error at step:', step, e);
+  document.getElementById('loading').hidden = true;
+  document.getElementById('error').hidden   = false;
+  const msg = (e?.message || String(e) || '(no message)').slice(0, 300);
+  // Put the actual error in the heading so it can't be missed
+  document.querySelector('#error h2').textContent = '[' + step + '] ' + msg;
+  document.getElementById('error-debug').textContent =
+    'Protocol: ' + location.protocol +
+    '\nURL: ' + location.href +
+    '\nType: ' + e?.name +
+    '\nStack: ' + (e?.stack || 'n/a');
+  document.getElementById(location.protocol === 'file:' ? 'error-file-hint' : 'error-cors-hint').hidden = false;
+}
+
+// Catch errors outside try-catch (e.g. Chart.js not loaded)
+window.addEventListener('error', ev => {
+  showError('window.onerror', ev.error || new Error(ev.message));
+});
 
 init();
 </script>
