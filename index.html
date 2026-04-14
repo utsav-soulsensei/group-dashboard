@@ -109,11 +109,17 @@ tr:hover td{background:rgba(99,102,241,.04)}
 <div id="error" hidden>
   <div class="error-box">
     <h2>Could not load data</h2>
-    <p id="error-msg"></p>
-    <p>This dashboard must be served over HTTP, not opened as a file. Run one of these in the dashboard folder:</p>
-    <code>npx serve .</code>
-    <code>python -m http.server 8000</code>
-    <p style="margin-top:8px">Then open <strong>http://localhost:3000</strong> (or :8000)</p>
+    <p id="error-msg" style="color:#f87171;font-weight:600;margin-bottom:14px"></p>
+    <div id="error-file-hint" hidden>
+      <p>This dashboard must be served over HTTP, not opened as a file. Run one of these in the dashboard folder:</p>
+      <code>npx serve .</code>
+      <code>python3 -m http.server 8000</code>
+      <p style="margin-top:8px">Then open <strong>http://localhost:3000</strong> (or :8000)</p>
+    </div>
+    <div id="error-cors-hint" hidden>
+      <p>The Google Sheet could not be fetched. Make sure the sheet is shared publicly:</p>
+      <p style="margin-top:8px">Sheet → Share → <strong>Anyone with the link → Viewer</strong></p>
+    </div>
   </div>
 </div>
 
@@ -706,6 +712,11 @@ async function init() {
     document.getElementById('loading').hidden = true;
     document.getElementById('error').hidden   = false;
     document.getElementById('error-msg').textContent = e?.message || String(e);
+    if (location.protocol === 'file:') {
+      document.getElementById('error-file-hint').hidden = false;
+    } else {
+      document.getElementById('error-cors-hint').hidden = false;
+    }
   }
 }
 
