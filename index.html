@@ -239,8 +239,6 @@ tr:hover td{background:rgba(99,102,241,.04)}
 
 <script>
 // ── CONFIG ───────────────────────────────────────────────────────────────────
-const SHEET_ID = '1Y1QV6_hBlZJY9ktltCjiJsNCFqcBsGUmdrRuxwwBWn4';
-const SHEET_NAMES = { overall:'', web:'Web', ios:'iOS', android:'Android' };
 const PRESETS = { day:['7d','15d','30d','All'], week:['4w','8w','All'], month:['3m','All'] };
 
 // ── STATE ────────────────────────────────────────────────────────────────────
@@ -249,76 +247,23 @@ let DB = null;   // { overall, web, ios, android }
 let LAST = null; // max date across all sheets
 let C = {};      // chart instances
 
-// ── CSV PARSING ──────────────────────────────────────────────────────────────
-function parseCSV(text) {
-  const rows = [];
-  let row = [], field = '', inQ = false;
-  for (let i = 0; i < text.length; i++) {
-    const c = text[i];
-    if (c === '"') { inQ = !inQ; continue; }
-    if (c === ',' && !inQ) { row.push(field); field = ''; continue; }
-    if ((c === '\n' || c === '\r') && !inQ) {
-      if (row.length || field) { row.push(field); rows.push(row); row = []; field = ''; }
-      if (c === '\r' && text[i+1] === '\n') i++;
-      continue;
-    }
-    field += c;
-  }
-  if (row.length || field) { row.push(field); rows.push(row); }
-  return rows;
-}
-
-const MON = {jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11};
-
-function parseDate(s) {
-  const p = String(s).trim().split('-');
-  if (p.length < 3) return null;
-  const mon = MON[p[1].toLowerCase()];
-  if (mon === undefined) return null;
-  const d = new Date(2000 + parseInt(p[2]), mon, parseInt(p[0]));
-  d.setHours(0,0,0,0);
-  return d;
-}
-
-function toMoney(s) { return parseInt(String(s).replace(/[₹,\s]/g,'')) || 0; }
-
-function parseRow(cols) {
-  if (!cols || cols.length < 14) return null;
-  const date = parseDate(cols[0]);
-  if (!date || isNaN(date.getTime())) return null;
-  const tp = parseFloat(cols[1]) || 0;
-  if (tp === 0) return null; // skip zero-payment rows
-  return {
-    date,
-    tp, np: parseFloat(cols[2])||0, rp: parseFloat(cols[3])||0,
-    tr: toMoney(cols[6]), nr: toMoney(cols[7]), rr: toMoney(cols[8]),
-    oa: toMoney(cols[11]), na: toMoney(cols[12]), ra: toMoney(cols[13])
-  };
-}
-
-// ── DATA FETCHING ────────────────────────────────────────────────────────────
-async function fetchSheet(name) {
-  const base = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv`;
-  const url = name ? `${base}&sheet=${encodeURIComponent(name)}` : base;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`HTTP ${res.status} fetching "${name||'overall'}" sheet`);
-  const text = await res.text();
-  return parseCSV(text).slice(1).map(parseRow).filter(Boolean).sort((a,b) => a.date-b.date);
-}
-
+// ── DATA LOADING ─────────────────────────────────────────────────────────────
 async function loadAll() {
-  const [overall, web, ios, android] = await Promise.all([
-    fetchSheet(SHEET_NAMES.overall),
-    fetchSheet(SHEET_NAMES.web),
-    fetchSheet(SHEET_NAMES.ios),
-    fetchSheet(SHEET_NAMES.android),
-  ]);
-  return { overall, web, ios, android };
+  const res = await fetch('data.json');
+  if (!res.ok) throw new Error('data.json not found (HTTP ' + res.status + ')');
+  const raw = await res.json();
+  // Convert ISO date strings → Date objects
+  ['overall','web','ios','android'].forEach(k => {
+    raw[k] = (raw[k] || []).map(r => ({ ...r, date: new Date(r.date + 'T00:00:00') }));
+  });
+  return raw;
 }
 
 function findLastDate() {
   let max = new Date(0);
-  Object.values(DB).flat().forEach(r => { if (r.date > max) max = r.date; });
+  ['overall','web','ios','android'].forEach(k => {
+    (DB[k]||[]).forEach(r => { if (r.date > max) max = r.date; });
+  });
   return max;
 }
 
@@ -680,7 +625,7 @@ async function init() {
     _step = 'showApp';
     document.getElementById('loading').hidden = true;
     document.getElementById('app').hidden     = false;
-    document.getElementById('lastUpdated').textContent = 'Last updated: '+fDate(LAST);
+    document.getElementById('lastUpdated').textContent = 'Updated: '+(DB.last_updated||fDate(LAST));
     _step = 'initCharts';
     initCharts();
     _step = 'navListener';

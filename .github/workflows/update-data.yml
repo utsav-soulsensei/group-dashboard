@@ -1,0 +1,25 @@
+name: Update data.json
+
+on:
+  schedule:
+    - cron: '0 2 * * *'   # daily at 2am UTC
+  workflow_dispatch:        # manual trigger from GitHub UI
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Fetch data from Google Sheets
+        run: python fetch_data.py
+
+      - name: Commit and push data.json
+        uses: EndBug/add-and-commit@v9
+        with:
+          message: 'chore: update data.json'
+          add: 'data.json'
