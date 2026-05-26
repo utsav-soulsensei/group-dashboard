@@ -74,6 +74,17 @@
     .bar-wrap{display:flex;align-items:center;gap:6px}
     .bar{height:6px;border-radius:3px;background:#6366f1;min-width:2px}
     .pct-val{font-size:11px;color:#818cf8;font-weight:600}
+
+    /* ── Acquisition controls ── */
+    .acq-controls{display:flex;flex-wrap:wrap;gap:14px;align-items:flex-end;margin-bottom:14px;background:#1a1d27;border:1px solid #2d3148;border-radius:10px;padding:14px 16px}
+    .acq-ctrl{display:flex;flex-direction:column;gap:5px}
+    .acq-ctrl label{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:#64748b}
+    .acq-ctrl select,.acq-ctrl input{background:#23273a;border:1px solid #2d3148;color:#e2e8f0;border-radius:5px;padding:6px 8px;font-size:12px;outline:none;min-width:120px}
+    .acq-ctrl select:focus,.acq-ctrl input:focus{border-color:#6366f1}
+    .acq-meta{margin-left:auto;font-size:11px;color:#64748b;align-self:center}
+    .ltable th.sortable{cursor:pointer;user-select:none}
+    .ltable th.sortable:hover{color:#94a3b8}
+    .ltable th .sort-ind{display:inline-block;width:10px;color:#6366f1;margin-left:4px}
   </style>
 </head>
 <body>
@@ -88,6 +99,7 @@
     <div class="nav-item" data-s="android">Android</div>
     <div class="nav-item" data-s="platform">Platform</div>
     <div class="nav-item" data-s="leaders">Leaders</div>
+    <div class="nav-item" data-s="acquisition">Acquisition</div>
   </div>
   <div class="gran-wrap">
     <div class="ctrl-lbl">Granularity</div>
@@ -165,6 +177,59 @@
       <div class="chart-card"><div class="chart-lbl">Platform Share</div><canvas id="c-plat-donut"></canvas></div>
     </div>
     <div class="chart-card"><div class="chart-lbl">Revenue by Platform</div><canvas id="c-plat-rev"></canvas></div>
+  </div>
+
+  <!-- Acquisition -->
+  <div class="section" id="section-acquisition">
+    <div class="sec-header">
+      <div class="sec-title">Acquisition</div>
+      <div class="period-badge">Last 7 Days · % new users per leader</div>
+    </div>
+
+    <div class="acq-controls">
+      <div class="acq-ctrl">
+        <label for="acq-sort">Sort by</label>
+        <select id="acq-sort">
+          <option value="newPct">New %</option>
+          <option value="tp">Total Purchases</option>
+          <option value="np">New Purchases</option>
+          <option value="name">Name</option>
+        </select>
+      </div>
+      <div class="acq-ctrl">
+        <label for="acq-dir">Order</label>
+        <select id="acq-dir">
+          <option value="desc">Descending</option>
+          <option value="asc">Ascending</option>
+        </select>
+      </div>
+      <div class="acq-ctrl">
+        <label for="acq-min-tp">Min Total Purchases</label>
+        <input type="number" id="acq-min-tp" min="0" step="1" value="1">
+      </div>
+      <div class="acq-ctrl">
+        <label for="acq-min-pct">Min New %</label>
+        <input type="number" id="acq-min-pct" min="0" max="100" step="1" value="0">
+      </div>
+      <div class="acq-ctrl">
+        <label for="acq-max-pct">Max New %</label>
+        <input type="number" id="acq-max-pct" min="0" max="100" step="1" value="100">
+      </div>
+      <div class="acq-meta" id="acq-meta">—</div>
+    </div>
+
+    <div class="chart-card">
+      <table class="ltable" id="tbl-acq">
+        <thead><tr>
+          <th class="rank">#</th>
+          <th class="sortable" data-sort="name">Leader<span class="sort-ind" data-for="name"></span></th>
+          <th class="r sortable" data-sort="tp">Total Purchases<span class="sort-ind" data-for="tp"></span></th>
+          <th class="r sortable" data-sort="np">New Purchases<span class="sort-ind" data-for="np"></span></th>
+          <th class="r sortable" data-sort="newPct">New %<span class="sort-ind" data-for="newPct"></span></th>
+        </tr></thead>
+        <tbody id="tbody-acq"></tbody>
+      </table>
+    </div>
   </div>
 
   <!-- Leaders -->
@@ -428,6 +493,7 @@ document.querySelectorAll('.nav-item').forEach(function(el){
     document.getElementById('section-'+curSec).classList.add('active');
     if (DATA) {
       if (curSec === 'leaders') renderLeaders();
+      else if (curSec === 'acquisition') renderAcquisition();
       else renderSection(curSec, curGran);
     }
   });
@@ -510,6 +576,83 @@ function renderLeaders() {
   });
 }
 
+var acqSort = 'newPct';
+var acqDir  = 'desc';
+
+function renderAcquisition() {
+  var L = DATA.leaders;
+  if (!L) return;
+  var minTp  = parseFloat(document.getElementById('acq-min-tp').value);
+  var minPct = parseFloat(document.getElementById('acq-min-pct').value);
+  var maxPct = parseFloat(document.getElementById('acq-max-pct').value);
+  if (isNaN(minTp))  minTp  = 0;
+  if (isNaN(minPct)) minPct = 0;
+  if (isNaN(maxPct)) maxPct = 100;
+
+  var rows = L.rows.map(function(r){
+    var pct = r.tp > 0 ? (r.np / r.tp * 100) : 0;
+    return {name:r.name, tp:r.tp, np:r.np, newPct:pct};
+  }).filter(function(r){
+    return r.tp >= minTp && r.newPct >= minPct && r.newPct <= maxPct;
+  });
+
+  rows.sort(function(a,b){
+    var va = a[acqSort], vb = b[acqSort];
+    if (acqSort === 'name') {
+      return acqDir === 'asc' ? va.localeCompare(vb) : vb.localeCompare(va);
+    }
+    return acqDir === 'asc' ? va - vb : vb - va;
+  });
+
+  var tb = document.getElementById('tbody-acq');
+  tb.innerHTML = '';
+  rows.forEach(function(r, i) {
+    var tr = document.createElement('tr');
+    tr.innerHTML =
+      '<td class="rank r">'+(i+1)+'</td>'+
+      '<td class="name">'+r.name+'</td>'+
+      '<td class="r">'+fNum(r.tp)+'</td>'+
+      '<td class="r">'+fNum(r.np)+'</td>'+
+      '<td class="r"><span class="pct-val">'+r.newPct.toFixed(1)+'%</span></td>';
+    tb.appendChild(tr);
+  });
+
+  document.getElementById('acq-meta').textContent = rows.length + ' of ' + L.rows.length + ' leaders';
+
+  document.querySelectorAll('#tbl-acq .sort-ind').forEach(function(el){
+    var f = el.getAttribute('data-for');
+    el.textContent = f === acqSort ? (acqDir === 'asc' ? '▲' : '▼') : '';
+  });
+  document.getElementById('acq-sort').value = acqSort;
+  document.getElementById('acq-dir').value  = acqDir;
+}
+
+document.getElementById('acq-sort').addEventListener('change', function(){
+  acqSort = this.value;
+  if (DATA) renderAcquisition();
+});
+document.getElementById('acq-dir').addEventListener('change', function(){
+  acqDir = this.value;
+  if (DATA) renderAcquisition();
+});
+['acq-min-tp','acq-min-pct','acq-max-pct'].forEach(function(id){
+  document.getElementById(id).addEventListener('input', function(){
+    if (DATA) renderAcquisition();
+  });
+});
+document.querySelectorAll('#tbl-acq th.sortable').forEach(function(th){
+  th.addEventListener('click', function(){
+    var f = th.getAttribute('data-sort');
+    if (acqSort === f) {
+      acqDir = acqDir === 'asc' ? 'desc' : 'asc';
+    } else {
+      acqSort = f;
+      acqDir = f === 'name' ? 'asc' : 'desc';
+    }
+    if (DATA) renderAcquisition();
+  });
+});
+
 buildRangeBtns();
 
 fetch('data.json')
@@ -522,6 +665,7 @@ fetch('data.json')
     document.getElementById('last-updated').textContent = 'Updated: ' + data.last_updated;
     renderSection('overall', 'daily');
     renderLeaders();
+    renderAcquisition();
   })
   .catch(function(err){
     document.getElementById('main').innerHTML =
