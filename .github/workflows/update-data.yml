@@ -1,9 +1,7 @@
 name: Update data.json
 
 on:
-  schedule:
-    - cron: '0 2 * * *'   # daily at 2am UTC (7:30am IST)
-  workflow_dispatch:        # manual trigger from GitHub UI
+  workflow_dispatch:        # manual trigger only — daily cron retired; data.json now refreshed in FaithApp/product
 
 permissions:
   contents: write           # needed to commit data.json back to the repo
